@@ -9,6 +9,8 @@
 
 #bash: pip install cryptography
 
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 import os
 import sqlite3
 import uuid
@@ -102,8 +104,8 @@ def decrypt_symmetric_key(encrypted_key: bytes, private_key):
 def register_user(email, password, role):
     cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
     if cursor.fetchone():
-        print("User already exists.")
-        return
+        messagebox.showerror("Error", "User already exists.")
+        return False
 
     salt, password_hash = hash_password(password)
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=backend)
@@ -124,7 +126,7 @@ def register_user(email, password, role):
     VALUES (?, ?, ?, ?, ?, ?)
     ''', (email, role, base64.b64encode(salt).decode(), base64.b64encode(password_hash).decode(), private_bytes, public_bytes))
     conn.commit()
-    print("User registered.")
+    return True
 
 def authenticate(email, password):
     cursor.execute("SELECT salt, password_hash FROM users WHERE email = ?", (email,))
@@ -147,6 +149,24 @@ def load_user_keys(email):
 
 # --- File Handling ---
 def send_medical_file(sender_email, recipient_email, message):
+    cursor.execute("SELECT role FROM users WHERE email = ?", (sender_email,))
+    sender_role = cursor.fetchone()[0]
+
+    if sender_role == "patient":
+        messagebox.showerror("Access Denied", "Patients cannot send files.")
+        return
+
+    if sender_role == "doctor" and recipient_email != "hospital@system":
+        messagebox.showerror("Access Denied", "Doctors can only send files to the hospital.")
+        return
+
+    if sender_role == "hospital":
+        cursor.execute("SELECT role FROM users WHERE email = ?", (recipient_email,))
+        recipient_role = cursor.fetchone()
+        if not recipient_role or recipient_role[0] != "patient":
+            messagebox.showerror("Access Denied", "Hospital can only send files to patients.")
+            return
+
     symmetric_key = os.urandom(32)
     ciphertext = encrypt_file(message.encode(), symmetric_key)
 
@@ -169,57 +189,114 @@ def send_medical_file(sender_email, recipient_email, message):
         base64.b64encode(signature).decode()
     ))
     conn.commit()
-    print(f"File sent! File ID: {file_id}")
+    messagebox.showinfo("Success", f"File sent! File ID: {file_id}")
 
-def read_medical_file(email, password, file_id):
+def read_files_for_user(email, password):
     if not authenticate(email, password):
-        print("Authentication failed.")
-        return
+        messagebox.showerror("Login Failed", "Invalid credentials.")
+        return []
 
-    cursor.execute("SELECT * FROM files WHERE file_id = ? AND recipient = ?", (file_id, email))
-    file = cursor.fetchone()
-    if not file:
-        print("Access denied or file not found.")
-        return
+    cursor.execute("SELECT file_id, sender, ciphertext, encrypted_key, signature FROM files WHERE recipient = ?", (email,))
+    files = cursor.fetchall()
+    messages = []
+    for file_id, sender, ciphertext_b64, encrypted_key_b64, signature_b64 in files:
+        ciphertext = base64.b64decode(ciphertext_b64)
+        encrypted_key = base64.b64decode(encrypted_key_b64)
+        signature = base64.b64decode(signature_b64)
 
-    _, user_priv = load_user_keys(email)
-    sender = file[1]
-    ciphertext = base64.b64decode(file[3])
-    encrypted_key = base64.b64decode(file[4])
-    signature = base64.b64decode(file[5])
+        _, user_priv = load_user_keys(email)
+        _, sender_pub = load_user_keys(sender)
 
-    _, sender_pub = load_user_keys(sender)
-    symmetric_key = decrypt_symmetric_key(encrypted_key, user_priv)
+        symmetric_key = decrypt_symmetric_key(encrypted_key, user_priv)
+        if not verify_signature(sender_pub, signature, ciphertext):
+            continue
 
-    if not verify_signature(sender_pub, signature, ciphertext):
-        print("Signature verification failed.")
-        return
+        decrypted = decrypt_file(ciphertext, symmetric_key).decode()
+        messages.append(f"From: {sender}\n{decrypted}")
+    return messages
 
-    plaintext = decrypt_file(ciphertext, symmetric_key)
-    print(f"\n--- Decrypted Message ---\nFrom: {sender}\n{plaintext.decode()}")
+# --- GUI ---
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Secure Medical System")
+        self.email = None
+        self.role = None
+        self.build_login()
 
-# --- CLI ---
-def main():
-    while True:
-        print("\n1. Register\n2. Send File\n3. Read File\n4. Exit")
-        choice = input("Choice: ")
-        if choice == '1':
-            email = input("Email: ")
-            password = getpass("Password: ")
-            role = input("Role (patient/doctor/hospital): ")
-            register_user(email, password, role)
-        elif choice == '2':
-            sender = input("Your email: ")
-            recipient = input("Recipient email: ")
-            message = input("Medical message: ")
-            send_medical_file(sender, recipient, message)
-        elif choice == '3':
-            email = input("Your email: ")
-            password = getpass("Your password: ")
-            file_id = input("Enter file ID: ")
-            read_medical_file(email, password, file_id)
-        elif choice == '4':
-            break
+    def build_login(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
+        tk.Label(self.root, text="Email").pack()
+        email_entry = tk.Entry(self.root)
+        email_entry.pack()
+        tk.Label(self.root, text="Password").pack()
+        pw_entry = tk.Entry(self.root, show="*")
+        pw_entry.pack()
+
+        def login():
+            email = email_entry.get()
+            password = pw_entry.get()
+            if authenticate(email, password):
+                self.email = email
+                cursor.execute("SELECT role FROM users WHERE email = ?", (email,))
+                self.role = cursor.fetchone()[0]
+                self.build_dashboard()
+            else:
+                messagebox.showerror("Login Failed", "Invalid credentials")
+
+        tk.Button(self.root, text="Login", command=login).pack()
+        tk.Button(self.root, text="Register", command=self.build_register).pack()
+
+    def build_register(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        tk.Label(self.root, text="Email").pack()
+        email_entry = tk.Entry(self.root)
+        email_entry.pack()
+        tk.Label(self.root, text="Password").pack()
+        pw_entry = tk.Entry(self.root, show="*")
+        pw_entry.pack()
+        tk.Label(self.root, text="Role").pack()
+        role_entry = tk.Entry(self.root)
+        role_entry.pack()
+
+        def register():
+            if register_user(email_entry.get(), pw_entry.get(), role_entry.get()):
+                messagebox.showinfo("Success", "User registered.")
+                self.build_login()
+
+        tk.Button(self.root, text="Submit", command=register).pack()
+        tk.Button(self.root, text="Back", command=self.build_login).pack()
+
+    def build_dashboard(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        tk.Label(self.root, text=f"Logged in as {self.email} ({self.role})").pack()
+        if self.role in ["doctor", "hospital"]:
+            tk.Button(self.root, text="Send Medical File", command=self.send_file_gui).pack()
+        tk.Button(self.root, text="View Files", command=self.view_files_gui).pack()
+        tk.Button(self.root, text="Logout", command=self.build_login).pack()
+
+    def send_file_gui(self):
+        recipient = simpledialog.askstring("Send File", "Recipient Email:")
+        message = simpledialog.askstring("Message", "Enter medical message:")
+        if recipient and message:
+            send_medical_file(self.email, recipient, message)
+
+    def view_files_gui(self):
+        messages = read_files_for_user(self.email, simpledialog.askstring("Password", "Confirm your password:", show="*"))
+        if messages:
+            for msg in messages:
+                messagebox.showinfo("File", msg)
+        else:
+            messagebox.showinfo("Info", "No messages found.")
+
+# Run the GUI
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = App(root)
+    root.mainloop()
