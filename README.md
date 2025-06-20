@@ -1,4 +1,4 @@
-# 🔐 SecureMed – Encrypted Medical Record System
+# 🔐 MedicalPrivacy – Encrypted Medical Record System
 
 SecureMed is a Flask-based web application designed to securely manage medical records. It uses **AES encryption** for medical data, **RSA** for key sharing, **digital signatures** for authenticity, and includes **access logging** for transparency.
 
@@ -7,7 +7,7 @@ SecureMed is a Flask-based web application designed to securely manage medical r
 ## Project Structure
 
 ```
-SecureMed/
+MedicalPrivacy/
 │
 ├── app.py                 # Main Flask application
 ├── auth.py                # Handles user registration and login
