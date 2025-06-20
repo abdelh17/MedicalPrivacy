@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="user-info">
+  <h2>Welcome, {{ user_email }}</h2>
+  <p>Role: <span class="role-badge role-{{ user_role }}">{{ user_role }}</span></p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Dashboard</h2>
+    <p class="card-subtitle">Access your medical system features</p>
+  </div>
+
+  <div class="dashboard-grid">
+    {% if user_role == 'doctor' %}
+      <div class="dashboard-card">
+        <h3>Write Patient Note</h3>
+        <p>Add medical notes to patient files</p>
+        <a href="{{ url_for('write_note_route') }}" class="btn btn-primary">Write Note</a>
+      </div>
+
+      <div class="dashboard-card">
+        <h3>View Patient File</h3>
+        <p>Access and review patient medical records</p>
+        <a href="{{ url_for('view_chart') }}" class="btn btn-primary">View File</a>
+      </div>
+    {% elif user_role == 'patient' %}
+      <div class="dashboard-card">
+        <h3>My Medical File</h3>
+        <p>View your personal medical records</p>
+        <a href="{{ url_for('view_chart') }}" class="btn btn-primary">View My File</a>
+      </div>
+    {% endif %}
+
+    {% if user_role == 'hospital' or user_role == 'patient' %}
+      <div class="dashboard-card">
+        <h3>Access Logs</h3>
+        <p>See when a file was accessed</p>
+        <a href="{{ url_for('access_logs') }}" class="btn btn-primary">View Logs</a>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="nav-links">
+    <a href="{{ url_for('logout') }}" class="nav-link">Logout</a>
+  </div>
+</div>
+{% endblock %}

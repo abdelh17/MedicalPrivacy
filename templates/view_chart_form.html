@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="card" style="max-width: 500px; margin: 2rem auto;">
+  <div class="card-header">
+    <h2 class="card-title">Access Medical File</h2>
+    <p class="card-subtitle">View all the data that was put in your file</p>
+  </div>
+
+  <form method="POST">
+    {% if user_role != 'patient' %}
+      <div class="form-group">
+        <label class="form-label">Patient Email</label>
+        <input type="email" name="patient_email" class="form-input" required placeholder="Enter patient email">
+      </div>
+    {% endif %}
+
+    <div class="form-group">
+      <label class="form-label">Re-enter Your Password</label>
+      <input type="password" name="password" class="form-input" required placeholder="Confirm your identity">
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full">View Medical Chart</button>
+  </form>
+
+  <div class="nav-links" style="justify-content: center;">
+    <a href="{{ url_for('dashboard') }}" class="nav-link">Back to Dashboard</a>
+  </div>
+</div>
+{% endblock %}

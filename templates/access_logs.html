@@ -1,0 +1,14 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h2 class="card-title">Access Logs</h2>
+  </div>
+
+  <div class="chart-data">{{ logs | join('\n') }}</div>
+
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}" class="nav-link">Back to Dashboard</a>
+  </div>
+</div>
+{% endblock %}
